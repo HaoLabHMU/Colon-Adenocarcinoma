@@ -6,6 +6,7 @@ Cells with low quality and doublets have been removed.
 Cell level metadata is available in the provided /sc_data/meta.Rdata, which contains sample, tissue type, major cell types and detailed cell types.
 
 Bulk level metadata is available in the provided /bulk_data/meta.Rdata, which contains sample and tissue type.
-
+```
 The raw data arw uploaded to GSA: scRNASeq: HRA006401, bulk RNASeq: HRA006350
 The processed data are uploaded to mendeley: scRNASeq: 10.17632/6czch25jyb.1, bulk RNASeq: 10.17632/hb9jjk2gbz.1.
+```

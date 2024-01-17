@@ -10,10 +10,21 @@ For scRNASeq data, a multi-step filtering process was further performed to remov
 To prepare data for downstream analysis, FastQC (v0.12.1) was used to assess the quality of raw sequencing data, and fastp software (v0.23.4) was applied to remove low-quality reads and any residual adapter sequences. The high-quality reads were aligned to human genome reference GRCh38 (hg38) using the STAR algorithm (v2.7.10b). ResQC (v5.0.3) is applied to assess the quality of alignment results using various alignment metrics, including coverage, mapping quality, and distribution of mapped reads. Then, FeatureCount (v2.0.6) was utilized to extract the feature count matrix from alignments. 
 
 ## Downloading the data
-Cell level metadata is available in the provided /sc_data/meta.Rdata, which contains sample, tissue type, major cell types and detailed cell types.
+Specific input data for each figure is also inclued in /input_data.
 
-Bulk level metadata is available in the provided /bulk_data/meta.Rdata, which contains sample and tissue type.
-
-The raw data arw uploaded to GSA: scRNASeq: HRA006401, bulk RNASeq: HRA006350
-
+The raw data are uploaded to GSA: scRNASeq: HRA006401, bulk RNASeq: HRA006350  
 The processed data are uploaded to mendeley: scRNASeq: 10.17632/6czch25jyb.1, bulk RNASeq: 10.17632/hb9jjk2gbz.1.
+
+## Data visualization
+__Requirements__
+Tested on macOS Big Sur  
+1. R version 4.3.1
+2. R packages
+   • Seurat
+   • ggplot2
+   • data.table
+   • dplyr
+   • tidyr
+   • ArchR
+   • pheatmap
+   • ggpubr

@@ -1,5 +1,5 @@
 # Colon-Adenocarcinoma
-This repository contains matadata and codes necessary for analysis of the scRNA-seq data of human Small Intestine and Colon presented in the artical titled Heterogeneous Immune Landscape between Small Intestine and Colon Provides Novel Insights of Intraepithelial T Cells in the Progression of Colon Adenocarcinoma.
+This repository contains some plot data and codes necessary for analysis of the scRNA-seq data of human Small Intestine and Colon presented in the artical titled Heterogeneous Immune Landscape between Small Intestine and Colon Provides Novel Insights of Intraepithelial T Cells in the Progression of Colon Adenocarcinoma.
 
 ## Data processing
 

@@ -16,7 +16,7 @@ The raw data are uploaded to GSA: scRNASeq: HRA006401, bulk RNASeq: HRA006350
 The processed data are uploaded to mendeley: scRNASeq: 10.17632/6czch25jyb.1, bulk RNASeq: 10.17632/hb9jjk2gbz.1.
 
 ## Data visualization
-__Requirements__  
+### Requirements
 Tested on macOS Big Sur  
 1. R version 4.3.1
 2. R packages

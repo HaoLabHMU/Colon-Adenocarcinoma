@@ -20,11 +20,11 @@ The processed data are uploaded to mendeley: scRNASeq: 10.17632/6czch25jyb.1, bu
 Tested on macOS Big Sur  
 1. R version 4.3.1
 2. R packages
-   • Seurat
-   • ggplot2
-   • data.table
-   • dplyr
-   • tidyr
-   • ArchR
-   • pheatmap
-   • ggpubr
+   - Seurat
+   - ggplot2
+   - data.table
+   - dplyr
+   - tidyr
+   - ArchR
+   - pheatmap
+   - ggpubr

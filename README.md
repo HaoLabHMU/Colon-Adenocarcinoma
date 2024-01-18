@@ -16,8 +16,8 @@ The processed data are uploaded to mendeley: scRNASeq: 10.17632/6czch25jyb.1, bu
 
 ## Data visualization
 ### Requirements
-Tested on macOS Big Sur  
-1. R version 4.3.1
+Tested on macOS Monterey  
+1. R version 4.2.1
 2. R packages
    - Seurat
    - ggplot2

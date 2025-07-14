@@ -39,7 +39,7 @@ groupMeans <- function(mat, groups = NULL, na.rm = TRUE, sparse = FALSE){
   return(gm)
 }
 #----------------------------------------------------------------------------------------------------------
-#### Fig.2B ####
+#### Fig.1B ####
 #----------------------------------------------------------------------------------------------------------
 cellType_1.colors <- ColAssign(unique(object$cellType_1),palettes="Tableau 10",n=10)
 p1 <- DimPlot(object, reduction = "umap",label =T,group.by = "cellType_1",
@@ -48,7 +48,7 @@ pdf("./Analysis_afterN/Figures/All/umap by cellType_1.pdf",width = 6,height=6)
 print(p1)
 dev.off()
 #----------------------------------------------------------------------------------------------------------
-#### Fig.2C ####
+#### Fig.1C ####
 #----------------------------------------------------------------------------------------------------------
 library('ggsignif');library(viridis)
 metaData <- object@meta.data
@@ -77,7 +77,7 @@ for (i in unique(metaData_CA$Tissue2)) {
   ggsave(plot.path,width = 6,g.overlay)
 }
 #----------------------------------------------------------------------------------------------------------
-#### Fig.2D ####
+#### Fig.1D ####
 #----------------------------------------------------------------------------------------------------------
 detach("package:reshape2", unload=TRUE)
 detach("package:plyr", unload=TRUE)
@@ -101,7 +101,7 @@ p1 <- ggplot(df,aes(x = Tissue2,y = freq,alluvium =cellType_2,fill=cellType_2,
   facet_wrap(~Source) +
   ggtitle("alluvial plot for cellType_2")
 #----------------------------------------------------------------------------------------------------------
-#### Fig.2E ####
+#### Fig.1E ####
 #----------------------------------------------------------------------------------------------------------
 df <- object@meta.data
 only_draw_pair_boxplot <- function(plot_df){
@@ -141,7 +141,7 @@ df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
 df$value <- df$freq
 p1 <- only_draw_pair_boxplot(df)#fraction of NKG7+ cells
 #----------------------------------------------------------------------------------------------------------
-#### Fig.2F ####
+#### Fig.1J ####
 #----------------------------------------------------------------------------------------------------------
 library("factoextra");library(ggfortify);library(dendextend)
 load("./Seurat_objects_afterN/color for CellType_12.rda")
@@ -166,7 +166,7 @@ for (i in c("T cells","Plasma","NK","Myeloid","B cells","MAST")) {
   dev.off()
 }
 #----------------------------------------------------------------------------------------------------------
-#### Fig.2G ####
+#### Fig.1K ####
 #----------------------------------------------------------------------------------------------------------
 load("scores.rda")
 df<- object@meta.data
@@ -194,7 +194,7 @@ ggplot(df,aes(Tissue2, Cyt.score)) +
   scale_fill_manual(values=Tissue.colors)+
   theme_classic()
 #----------------------------------------------------------------------------------------------------------
-#### Fig.2I ####
+#### Fig.1M ####
 #----------------------------------------------------------------------------------------------------------
 # remove ribosomal genes, MT genes and BCR variable genes from analysis:
 ribosomals <- grep(pattern = "^RP[SL]", x = rownames(object), value = TRUE)

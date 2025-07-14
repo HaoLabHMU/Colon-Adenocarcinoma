@@ -26,7 +26,7 @@ groupMeans <- function (mat, groups = NULL, na.rm = TRUE, sparse = FALSE){
 B.colors <- c(B_Naive="#E7F6D2",B_Mem="#3EB7CC",Bfoc_MKI67="#ffd94a",
               Bfoc_NEIL1="#5F8E95",`Long-live PC`="#32A251",`Short-live PC`="#CE672E")
 #----------------------------------------------------------------------------------------------------------
-#### Figure 3A and S2A ####
+#### Extended Data Fig. 1A,1B ####
 #----------------------------------------------------------------------------------------------------------
 Bcell <- subset(object,subset= cellType_1 %in% c("B cells","Plasma"))
 
@@ -78,7 +78,7 @@ Bcell <- subset(object,subset= cellType_1 %in% c("B cells","Plasma"))
     scale_x_discrete(breaks=Markers,labels=Markers)+ ylab("cellType_2")+ xlab("")
 }
 #----------------------------------------------------------------------------------------------------------
-#### Figure 3E, 3G and S2H ####
+#### Extended Data Fig. 2A ####
 #----------------------------------------------------------------------------------------------------------
 DEGs <- FindMarkers(Bcell,ident.1 = "T",logfc.threshold=0.1,group.by = "Tissue2",min.pct = 0.3)
 DEGs <- DEGs[rownames(DEGs) %ni% c(ribosomals,TCR.genes,MT.genes,BCR.genes),]
@@ -90,10 +90,10 @@ write.table(DEGs,file = "DEGs of Tumor vs. other of B cells.txt",
 colour_bk <- c("#f0f0f0",colorRampPalette(c("#006837","#d9ef8b"))(5),
                colorRampPalette(c("#d9ef8b","#fee08b"))(5),
                colorRampPalette(c("#fee08b","#a50026"))(15))
-FeaturePlot(Bcell, c("IFITM2","IFITM1","STAT1","TGFB1"),raster=T,order=F,pt.size = 2) & 
+FeaturePlot(Bcell, "TGFB1",raster=T,order=F,pt.size = 2) & 
   scale_colour_gradientn(colours = colour_bk)
 #----------------------------------------------------------------------------------------------------------
-#### Figure 3F, S2D and S2E ####
+#### Fig. 1F, Extended Data Fig. 2B,2C ####
 #----------------------------------------------------------------------------------------------------------
 metaData <- Bcell@meta.data
 df <- metaData %>% group_by(Tissue2,Source,cellType_2,.drop = FALSE) %>% summarise(n=n())
@@ -140,7 +140,7 @@ p3 <- ggplot(df, aes(x = Tissue2, y = n, fill = c_call)) +
   theme_classic()+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
   facet_grid(cols = vars(Source))#6*12
 #----------------------------------------------------------------------------------------------------------
-#### Figure 3H ####
+#### Figure 1G ####
 #----------------------------------------------------------------------------------------------------------
 #1. get clones from tumor B cells
 load("clone_mutation.rda")
@@ -178,7 +178,7 @@ df2 <- df %>% group_by(clone_id,Tissue2,Source,.drop = FALSE) %>% summarise(valu
 df2$Tissue2 <- factor(df2$Tissue2,levels=c("I","Colon","T"))
 p1 <- only_draw_pair_boxplot(df2)
 #----------------------------------------------------------------------------------------------------------
-#### Figure 3I ####
+#### Figure 1H ####
 #----------------------------------------------------------------------------------------------------------
 df <- clone_mutation[clone_mutation$sequence_id %in% Bcell$cells,]
 df$cellType <- Bcell@meta.data[df$sequence_id,"CellType_n"]
@@ -201,22 +201,7 @@ df$value <- df$mut_freq_r
 df$Patient <- df$patient
 df$Tissue2 <- factor(df$Tissue2,levels = names(Tissue.colors))
 p1 <- only_draw_pair_boxplot(df)
-#----------------------------------------------------------------------------------------------------------
-#### Figure S2J ####
-#----------------------------------------------------------------------------------------------------------
-load("monocle3 of PCs.rda")
-df2 <- clone_mutation[clone_mutation$sequence_id %in% Bcell$cells,]
-df2$cellType <- Bcell@meta.data[df2$sequence_id,"CellType_n"]
-df2 <- df2[df2$cellType=="PCs",]
-df2$pseudotime <- df[df2$sequence_id,'pseudotime']
-p <- ggplot(df2, mapping = aes(x=pseudotime, y=100*mu_freq_seq_r)) + 
-  theme_classic() + 
-  xlab('Pseudotime') 
-+ylab('SHM')
-p <- p + 
-  geom_smooth(aes(color = pseudotime), method = 'gam', se=T, color = 'black')
-p1 <- p + 
-  scale_y_continuous(breaks=seq(4, 6, 0.2))
+
 #----------------------------------------------------------------------------------------------------------
 #### End ####
 #----------------------------------------------------------------------------------------------------------

@@ -66,7 +66,7 @@ groupMeans <- function (mat, groups = NULL, na.rm = TRUE, sparse = FALSE){
   return(gm)
 }
 #----------------------------------------------------------------------------------------------------------
-#### Figure 4A ####
+#### Figure 2A ####
 #----------------------------------------------------------------------------------------------------------
 CD8.Tcell <- subset(object,subset = CellType_n %in% 
                       c('CD8_Mem','CD8_Naive','CD8act_IFI',
@@ -88,7 +88,7 @@ p2 <- FeaturePlot(CD8T_Tissue, features = "IEL.score",
 p3 <- FeaturePlot(CD8T_Tissue, features = "CD6",
                   raster=T,reduction = "umap",pt.size = 2)
 #----------------------------------------------------------------------------------------------------------
-#### Figure 4B ####
+#### Extended Data Fig. 3G ####
 #----------------------------------------------------------------------------------------------------------
 sel.genes <- c("CD8A",
                "LEF1","TCF7","CCR7","SELL",#Naive
@@ -107,7 +107,7 @@ p1 <- DotPlot(CD8T_Tissue, features = sel.genes,assay = "RNA",scale = T,group.by
   theme(axis.text.x = element_text(angle = 90)) +
   scale_x_discrete(breaks=sel.genes,labels=sel.genes)+ ylab("Tissue")+ xlab("")
 #----------------------------------------------------------------------------------------------------------
-#### Figure 4C and related figures ####
+#### Extended Data Fig. 3H,3I ####
 #----------------------------------------------------------------------------------------------------------
 CD4T <- subset(object, subset=cellType_2=="CD4+ cells")
 CD4T <- scCluster(CD4T,nfeature=2500,min.d=0.1,res=1)
@@ -129,7 +129,7 @@ p2 <- DotPlot(CD4T, features = sel.genes,assay = "RNA",scale = T,group.by = "Cel
   theme(axis.text.x = element_text(angle = 90)) +
   scale_x_discrete(breaks=sel.genes,labels=sel.genes)+ ylab("Tissue")+ xlab("")
 #----------------------------------------------------------------------------------------------------------
-#### Figure 4D and related figures ####
+#### Extended Data Fig. 3J,3K ####
 #----------------------------------------------------------------------------------------------------------
 CD8.Tcell <- subset(object,subset = CellType_n %in% 
                       c('CD8_Mem','CD8_Naive','CD8act_IFI',
@@ -158,7 +158,7 @@ p2 <- DotPlot(PLN, features = sel.genes,assay = "RNA",scale = T,group.by = "Cell
   theme(axis.text.x = element_text(angle = 90)) +
   scale_x_discrete(breaks=sel.genes,labels=sel.genes)+ ylab("Tissue")+ xlab("")
 #----------------------------------------------------------------------------------------------------------
-#### Figure 4E ####
+#### Extended Data Fig. 1H ####
 #----------------------------------------------------------------------------------------------------------
 library("scales")
 metaData <- object@meta.data[c(colnames(CD4T),colnames(PLN),colnames(CD8T_Tissue)),]
@@ -191,7 +191,7 @@ p1 <- ggplot(data =  df2, aes(x = Tissue, y = cellType)) +
                        values=rescale(c(0,0.5,1,1.5,2,2.3)),
                        guide="colorbar")
 #----------------------------------------------------------------------------------------------------------
-#### Figure 4F and related figures ####
+#### Extended Data Fig. 1I ####
 #----------------------------------------------------------------------------------------------------------
 detach("package:plyr", unload=TRUE)
 only_draw_pair_boxplot <- function(plot_df){
@@ -222,7 +222,7 @@ df2$Tissue2 <-factor(df2$Tissue2, levels = names(Tissue.colors))
 df2$value <- df2$freq
 p2 <- only_draw_pair_boxplot(df2)
 #----------------------------------------------------------------------------------------------------------
-#### Figure 4G, 4H and related figures ####
+#### Extended Data Fig. 3N,3O ####
 #----------------------------------------------------------------------------------------------------------
 #1. across cellTypes of CD8 T and CD4 T
 {
@@ -319,7 +319,7 @@ p2 <- only_draw_pair_boxplot(df2)
     facet_wrap(~Source)
 }
 #----------------------------------------------------------------------------------------------------------
-#### Figure 4J and related figures ####
+#### Figure 2B and related figures ####
 #----------------------------------------------------------------------------------------------------------
 sel.genes1 <- c("IFNG","NKG7","CGAS","RGS1","CCR9","IL7R","CD69","DUSP2")
 sel.genes2 <- c("LYST","CTLA4","TIGIT","LAYN","CD74","PDCD1","LAG3","HAVCR2")
@@ -386,7 +386,7 @@ only_draw_pair_boxplot <- function(plot_df){
   p2 <- only_draw_pair_boxplot(df)
 }
 #----------------------------------------------------------------------------------------------------------
-#### Figure 4K and related figures ####
+#### Figure 2G and related figures ####
 #----------------------------------------------------------------------------------------------------------
 library(monocle)
 IEL <- subset(object,subset=CellType_n=="Induced.IEL")
@@ -463,7 +463,7 @@ p4 <- ggplot(df, mapping = aes(x=Pseudotime, y=Tumor_Specific)) +
   }
 }
 #----------------------------------------------------------------------------------------------------------
-#### Figure S5B ####
+#### Figure 2I ####
 #----------------------------------------------------------------------------------------------------------
 df <- object@meta.data[colnames(CD8.Tcell),]
 df$CD160 <- GetAssayData(CD8.Tcell,slot="data")["CD160",]
@@ -480,16 +480,9 @@ p1 <- ggplot(df,aes(Tissue2, freq)) + #stat_compare_means()+
   geom_jitter(width = 0.1)+scale_fill_manual(values=Tissue.colors)+
   theme_classic()+ylab("Fraction of CD160+ T cells")+
   facet_wrap(~Source)
+
 #----------------------------------------------------------------------------------------------------------
-#### Figure 5A ####
-#----------------------------------------------------------------------------------------------------------
-CD8T_Tissue$groups <- paste0(CD8T_Tissue$Tissue2,"_",CD8T_Tissue$CellType_n)
-p1 <- DotPlot(CD8T_Tissue, features = "CD160",assay = "RNA",scale = T,group.by = "groups") +
-  scale_colour_gradientn(colors=brewer.pal(10, "BuPu")) + theme_bw() +
-  theme(axis.text.x = element_text(angle = 90)) +
-  ylab("Tissue")+ xlab("")
-#----------------------------------------------------------------------------------------------------------
-#### Figure 5D and related figures ####
+#### Figure 2M and related figures ####
 #----------------------------------------------------------------------------------------------------------
 CD8T_Tissue$CD160 <- GetAssayData(CD8T_Tissue)["CD160",]
 CD8T_Tissue$CD160 <- ifelse(CD8T_Tissue$CD160>0,"CD160+","CD160-")
@@ -531,35 +524,9 @@ library(ggrepel)
     scale_y_continuous(breaks = seq(-6,8,by=0.5))+
     scale_x_continuous(breaks = seq(-4,8,by=0.5))
 }
-#----------------------------------------------------------------------------------------------------------
-#### Figure 5E and related figures ####
-#----------------------------------------------------------------------------------------------------------
-detach("package:plyr", unload=TRUE)
-CD8T_Tissue <- NormalizeData(CD8T_Tissue)
-CD160 <- GetAssayData(CD8T_Tissue,slot = "data")["CD160",]
-df <- object@meta.data[names(CD160),]
-df$CD160 <- CD160
-df <- cbind(df,scores[df$cells,-1])
-i=colnames(df)[13]
-df2 <- df %>% group_by(CellType_n) %>% summarise(cor = cor(CD160, get(i)))
-df3 <- df %>% group_by(CellType_n) %>% summarise(p = cor.test(CD160, get(i))$p.value)
 
-colnames(df2)[2] <- "Exh.score"
-colnames(df3)[2] <- "Exh.score"
-df <- melt(df2[,c("CellType_n","Exh.score")])
-tmp <- melt(df3[,c("CellType_n","Exh.score")])
-tmp$value[tmp$value < 1e-30] <- 1e-30
-df$p.value <- -log10(tmp$value)
-df$CellType_n <- factor(df$CellType_n,levels=c('Induced.IEL','CD8act_IFI','GZMK+ effector','CD8_Mem',
-                                               'MAIT','Natural.IEL','CD8_Naive'))
-p1 <- ggplot(df, aes(y=value, x=CellType_n,fill=p.value)) + 
-  geom_dotplot(binaxis='y',dotsize=4, stackdir='center') +
-  scale_fill_gradientn(colors=brewer.pal(10, "Reds")) + 
-  facet_wrap(~variable) +
-  theme_classic() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 #----------------------------------------------------------------------------------------------------------
-#### Figure 5F and related figures ####
+#### Figure 3A and related figures ####
 #----------------------------------------------------------------------------------------------------------
 metaData_fil <- object@meta.data
 metaData_fil <- cbind(metaData_fil,scores[,-1])

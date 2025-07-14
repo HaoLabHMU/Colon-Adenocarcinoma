@@ -1,9 +1,13 @@
-library(Seurat);library(dplyr);library(ggplot2)
+library(Seurat);library(dplyr);library(ggplot2);library(pheatmap);library(harmony)
 library(data.table);library(ggpubr);library(ArchR);library(RColorBrewer)
 #----------------------------------------------------------------------------------------------------------
 #### load data and functions ####
 #----------------------------------------------------------------------------------------------------------
 object <-  readRDS("allCells.rds")
+load("scores.rda")
+colour_bk <- c("#f0f0f0",colorRampPalette(c("#313695","#abd9e9"))(10),
+               colorRampPalette(c("#abd9e9","#fee090"))(15),
+               colorRampPalette(c("#fee090","#a50026"))(25))
 ColAssign <- function(Var,palettes="Classic 20", n = 20){
   require(ggthemes);require(RColorBrewer)
   pal <- tableau_color_pal(palette = palettes,direction = 1,type="regular")
@@ -23,8 +27,31 @@ ColAssign <- function(Var,palettes="Classic 20", n = 20){
   }
   return(palOut)
 }
+scCluster <- function(obj,nfeature=2500,min.d=0.1,res=1,TCRBCR=TRUE) {
+  if (TCRBCR) {
+    TCR.genes <- grep("^TR[AB][VJ]",rownames(obj),value = T)# keep GD TCR genes for GDT cells
+    BCR.genes <- c(grep("^IG[KHL][VJC]",rownames(obj),value = T),
+                   grep("^AC[0-9]",rownames(obj),value = T))# some RNA genes are also excluded.
+  } else {TCR.genes <- c();BCR.genes <- c()}
+  obj@assays$RNA@scale.data <- matrix() # in order to subset memory efficiently
+  obj <- NormalizeData(obj)
+  obj <- FindVariableFeatures(obj,nfeatures = nfeature)
+  var.genes <- VariableFeatures(obj)
+  var.genes <- setdiff(var.genes,c(TCR.genes,BCR.genes))
+  VariableFeatures(obj) <- var.genes
+  obj <- ScaleData(obj,features = var.genes)
+  obj <- RunPCA(obj, verbose = FALSE,features = VariableFeatures(obj),npcs=30)
+  obj <- RunHarmony(obj, group.by.vars=c("orig.ident","Tissue2"),assay.use ="RNA")
+  obj <- FindNeighbors(obj, dims=1:30,reduction = "harmony",k.param = 30)
+  obj <- FindClusters(obj,resolution=res,random.seed=123,graph.name = 'RNA_snn')
+  obj <- RunUMAP(obj,reduction = "harmony",seed.use = 123,dims=1:30,
+                 umap.method='uwot',min.dist=min.d,spread=1)
+  return(obj)
+}
+load("./Seurat_objects_afterN/color for CellType_n.rda")
+load("./Seurat_objects_afterN/color for CellType_12.rda")
 Tissue.colors <- c(PBMC="#F47D2B",LN="#f0f0f0",I="#33a02c",Colon="#89288F",T="#8A9FD1")
-groupMeans <- function(mat, groups = NULL, na.rm = TRUE, sparse = FALSE){
+groupMeans <- function (mat, groups = NULL, na.rm = TRUE, sparse = FALSE){
   stopifnot(!is.null(groups))
   stopifnot(length(groups) == ncol(mat))
   gm <- lapply(unique(groups), function(x) {
@@ -39,71 +66,342 @@ groupMeans <- function(mat, groups = NULL, na.rm = TRUE, sparse = FALSE){
   return(gm)
 }
 #----------------------------------------------------------------------------------------------------------
-#### Fig.1B ####
+#### Figure 2A ####
 #----------------------------------------------------------------------------------------------------------
-cellType_1.colors <- ColAssign(unique(object$cellType_1),palettes="Tableau 10",n=10)
-p1 <- DimPlot(object, reduction = "umap",label =T,group.by = "cellType_1",
-              pt.size = 1,raster=T,shuffle=T,cols=cellType_1.colors)
-pdf("./Analysis_afterN/Figures/All/umap by cellType_1.pdf",width = 6,height=6)
-print(p1)
-dev.off()
+CD8.Tcell <- subset(object,subset = CellType_n %in% 
+                      c('CD8_Mem','CD8_Naive','CD8act_IFI',
+                        'GZMK+ effector','Induced.IEL',
+                        'MAIT','Natural.IEL'))
+CD8T_Tissue <- subset(CD8.Tcell,subset=Tissue2 %in% c("I","Colon","T"))
+CD8T_Tissue <- scCluster(CD8T_Tissue,nfeature=2500,min.d=0.1,res=1.5)
+CD8T_Tissue <- RunUMAP(CD8T_Tissue,reduction = "harmony",seed.use = 123,n.neighbors = 50,
+                       dims=1:30,min.dist=0.6,spread=1)
+
+p1 <- DimPlot(CD8T_Tissue, reduction = "umap",label =T,group.by = "CellType_n",
+              pt.size = 1.5,raster=T,shuffle=T,cols=T.colors)
+
+CD8T_Tissue$IEL.score <- scores[colnames(CD8T_Tissue),"IEL.score"]
+p2 <- FeaturePlot(CD8T_Tissue, features = "IEL.score",
+                  raster=T,reduction = "umap",pt.size = 2) & 
+  scale_colour_gradientn(colours = colour_bk)
+
+p3 <- FeaturePlot(CD8T_Tissue, features = "CD6",
+                  raster=T,reduction = "umap",pt.size = 2)
+
 #----------------------------------------------------------------------------------------------------------
-#### Fig.1C ####
+#### Figure 2B and related figures ####
 #----------------------------------------------------------------------------------------------------------
-library('ggsignif');library(viridis)
-metaData <- object@meta.data
-umaps <- Embeddings(object,reduction = "umap")
-metaData <- cbind(metaData,umaps)
-metaData_H <- metaData[metaData$Source=="Healthy",]
-metaData_CA <- metaData[metaData$Source=="CA",]
-for (i in unique(metaData_H$Tissue2)) {
-  x <- metaData_H[metaData_H$Tissue2 == i,]
-  g.overlay <- ggplot(data = x,aes(x = UMAP_1, y = UMAP_2)) +
-    stat_density_2d(aes(fill = ..density..), geom = "raster",contour = F)+
-    geom_point(color = 'white',size = .005)+
-    scale_fill_viridis(option="D")+theme_classic()
-  plot.path=paste0("./Analysis_afterN/Figures/All/umap by Density of ",i,"_healthy.pdf")
-  ggsave(plot.path,width = 6,g.overlay)
+sel.genes1 <- c("IFNG","NKG7","CGAS","RGS1","CCR9","IL7R","CD69","DUSP2")
+sel.genes2 <- c("LYST","CTLA4","TIGIT","LAYN","CD74","PDCD1","LAG3","HAVCR2")
+bk <- c(seq(-2,-0.1,by=0.02),seq(0,2,by=0.02))
+colour_bk <- c(colorRampPalette(c("#2166ac","#d1e5f0"))(83),
+               colorRampPalette(c("#d1e5f0","#f7f7f7"))(15),
+               colorRampPalette(c("#f7f7f7","#fddbc7"))(15),
+               colorRampPalette(c("#fddbc7","#b2182b"))(84))
+mat <- GetAssayData(CD4T)[c(sel.genes1,sel.genes2),]
+Mat <- groupMeans(mat,groups=CD4T$Tissue2,na.rm = TRUE, sparse = T)
+Mat <- Mat[,c("I","Colon","T")]
+pheatmap(Mat, cluster_rows=F, cluster_cols=F,
+         scale="row",show_colnames=T,show_rownames=T,
+         breaks = bk,color = colour_bk,angle_col=90)
+
+mat <- GetAssayData(CD8T_Tissue)[c(sel.genes1,sel.genes2),]
+Mat <- groupMeans(mat,groups=CD8T_Tissue$Tissue2,na.rm = TRUE, sparse = T)
+pheatmap(Mat, cluster_rows=F, cluster_cols=F,
+         scale="row",show_colnames=T,show_rownames=T,
+         breaks = bk,color = colour_bk,angle_col=90)
+
+only_draw_pair_boxplot <- function(plot_df){
+  p1 <- ggplot(data=plot_df, aes(x = Tissue2, y = value)) +
+    geom_boxplot(alpha =0.7,size=1,outlier.shape = NA, mapping = aes(fill = Tissue2))+
+    geom_jitter(size=3, shape=16,aes(group=Patient,col = Tissue2),
+                alpha = 0.9,position = position_dodge(0))+
+    scale_color_manual(values = Tissue.colors)+
+    scale_fill_manual(values = Tissue.colors)+
+    geom_line(aes(group = Patient), color = 'grey40', lwd = 0.3,position = position_dodge(0))+ #添加连线
+    theme_classic()
+  return(p1)
+}
+# CD4 T
+{
+  CD4T$class <- paste0(CD4T$Tissue2,"-",CD4T$Patient)
+  mat <- GetAssayData(CD4T)[c(sel.genes1,sel.genes2),]
+  Mat <- groupMeans(mat,groups=CD4T$class,na.rm = TRUE, sparse = T)
+  df <- unique(CD4T@meta.data[,c("class","Tissue2","Patient")])
+  rownames(df) <- df$class
+  df <- df[colnames(Mat),]
+  df$sel1 <- colMeans(Mat[sel.genes1,])
+  df$sel2 <- colMeans(Mat[sel.genes2,])
+  df$value = df$sel1
+  df$Tissue2 <- factor(df$Tissue2,levels = c("I","Colon","T"))
+  p1 <- only_draw_pair_boxplot(df)
+  df$value = df$sel2
+  p2 <- only_draw_pair_boxplot(df)
+}
+# CD8 T
+{
+  CD8T_Tissue$class <- paste0(CD8T_Tissue$Tissue2,"-",CD8T_Tissue$Patient)
+  mat <- GetAssayData(CD8T_Tissue)[c(sel.genes1,sel.genes2),]
+  Mat <- groupMeans(mat,groups=CD8T_Tissue$class,na.rm = TRUE, sparse = T)
+  df <- unique(CD8T_Tissue@meta.data[,c("class","Tissue2","Patient")])
+  rownames(df) <- df$class
+  df <- df[colnames(Mat),]
+  df$sel1 <- colMeans(Mat[sel.genes1,])
+  df$sel2 <- colMeans(Mat[sel.genes2,])
+
+  df$Tissue2 <- factor(df$Tissue2,levels = c("I","Colon","T"))
+  df$value = df$sel1
+  p1 <- only_draw_pair_boxplot(df)
+  df$value = df$sel2
+  p2 <- only_draw_pair_boxplot(df)
+}
+#----------------------------------------------------------------------------------------------------------
+#### Figure 2G and related figures ####
+#----------------------------------------------------------------------------------------------------------
+library(monocle)
+IEL <- subset(object,subset=CellType_n=="Induced.IEL")
+IEL <- FindVariableFeatures(IEL,nfeatures = 2500)
+cell_metadata <- IEL@meta.data
+expression_data <- GetAssayData(IEL,slot="counts")
+gene_annotation <- data.frame(gene_short_name=rownames(expression_data),
+                              stringsAsFactors = F,row.names = rownames(expression_data))
+pd <- new("AnnotatedDataFrame", data = cell_metadata)
+fd <- new("AnnotatedDataFrame", data = gene_annotation)
+IEL.cds <- newCellDataSet(cellData=expression_data,phenoData = pd,
+                          featureData = fd,expressionFamily=negbinomial.size())
+IEL.cds <- estimateSizeFactors(IEL.cds)
+IEL.cds <- estimateDispersions(IEL.cds)
+ordering_genes <- VariableFeatures(IEL)
+IEL.cds <- setOrderingFilter(IEL.cds, ordering_genes)
+IEL.cds <- reduceDimension(IEL.cds, max_components = 2,reduction_method = 'DDRTree',pseudo_expr=1)
+IEL.cds <- orderCells(IEL.cds)
+IEL.cds$Exh.score <- scores[colnames(IEL.cds),"Exh.score"]
+IEL.cds$IEL.score <- scores[colnames(IEL.cds),"IEL.score"]
+
+df=phenoData(IEL.cds)@data
+df <- cbind(df,t(IEL.cds@reducedDimS))#c("Component_1","Component_2")
+df <- cbind(df,scores[rownames(df),c("NeoTCR_CD8","Tumor_Specific","Virus_Specific","NeoTCR_CD4","MANA_TIL","Influenza_TIL")])
+iOrd <- c('MKI67','PDCD1',"CD160")
+df <- cbind(df,t(GetAssayData(IEL,slot="data")[iOrd,rownames(df)]))
+colour_bk <- c(colorRampPalette(c("#313695","#abd9e9"))(10),
+               colorRampPalette(c("#abd9e9","#fee090"))(15),
+               colorRampPalette(c("#fee090","#a50026"))(15))
+p <- plot_cell_trajectory(IEL.cds, color_by = "Pseudotime",cell_size=1,show_branch_points=F)+
+  scale_color_gradientn(colors=colour_bk)
+
+colour_bk <- c("#f0f0f0",colorRampPalette(c("#313695","#abd9e9"))(10),
+               colorRampPalette(c("#abd9e9","#fee090"))(15),
+               colorRampPalette(c("#fee090","#a50026"))(15))
+p1 <- ggplot(df, aes(x=Component_1, y=Component_2)) +
+  geom_point(aes(color=MKI67),size=0.5)+
+  scale_color_gradientn(colors=colour_bk)+
+  theme_classic()
+p2 <- ggplot(df, aes(x=Component_1, y=Component_2)) +
+  geom_point(aes(color=Exh.score),size=0.5)+
+  scale_color_gradientn(colors=colour_bk)+
+  theme_classic()
+
+p1 <- ggplot(df, mapping = aes(x=Pseudotime, y=Exh.score)) + 
+  theme_classic() + xlab('Pseudotime') + ylab('Exh.score')+
+  geom_smooth(aes(group = Tissue2,color = Tissue2),method = 'loess', se=F)+
+  scale_color_manual(values=Tissue.colors)
+p2 <- ggplot(df, mapping = aes(x=Pseudotime, y=NeoTCR_CD8)) + 
+  theme_classic() + xlab('Pseudotime') +
+  geom_smooth(aes(group = Tissue2,color = Tissue2),method = 'loess', se=F)+
+  scale_color_manual(values=Tissue.colors)
+p3 <- ggplot(df, mapping = aes(x=Pseudotime, y=Virus_Specific)) + 
+  theme_classic() + xlab('Pseudotime') +
+  geom_smooth(aes(group = Tissue2,color = Tissue2),method = 'loess', se=F)+
+  scale_color_manual(values=Tissue.colors)
+p4 <- ggplot(df, mapping = aes(x=Pseudotime, y=Tumor_Specific)) + 
+  theme_classic() + xlab('Pseudotime') +
+  geom_smooth(aes(group = Tissue2,color = Tissue2),method = 'loess', se=F)+
+  scale_color_manual(values=Tissue.colors)
+
+# gene expression across pseudotime
+{
+  for (i in genes){
+    i=ensym(i)
+    p <- ggplot(df, mapping = aes(x=Pseudotime, y = !!i)) + 
+      theme_classic() + xlab('Pseudotime') + ylab('expression')+
+      geom_smooth(aes(group = Tissue2,color = Tissue2),method = 'loess', se=F)+
+      scale_color_manual(values=Tissue.colors)
+    plot.path <- paste0("Smooth line of ",i," in IEL trajectory.pdf")
+    pdf(plot.path,width = 6,height = 4)
+    print(p)
+    dev.off()
+  }
+}
+#----------------------------------------------------------------------------------------------------------
+#### Figure 2I ####
+#----------------------------------------------------------------------------------------------------------
+df <- object@meta.data[colnames(CD8.Tcell),]
+df$CD160 <- GetAssayData(CD8.Tcell,slot="data")["CD160",]
+df <- df[df$CellType_n != "Natural.IEL",]#remove GDT
+df$CD160 <- ifelse(df$CD160>0,"Positive","Negative")
+df[,c("CD160")] <- factor(df$CD160)
+
+detach("package:plyr", unload=TRUE)
+df <- df %>% group_by(Source,Patient,Tissue2,CD160,.drop = FALSE) %>% summarise(n = n()) %>% mutate(freq = n/sum(n))
+df<-df[df$CD160=="Positive",]
+df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
+p1 <- ggplot(df,aes(Tissue2, freq)) + #stat_compare_means()+
+  geom_boxplot(aes(fill = Tissue2),outlier.shape = NA,alpha = 1, col = "grey")+
+  geom_jitter(width = 0.1)+scale_fill_manual(values=Tissue.colors)+
+  theme_classic()+ylab("Fraction of CD160+ T cells")+
+  facet_wrap(~Source)
+
+#----------------------------------------------------------------------------------------------------------
+#### Figure 2M and related figures ####
+#----------------------------------------------------------------------------------------------------------
+CD8T_Tissue$CD160 <- GetAssayData(CD8T_Tissue)["CD160",]
+CD8T_Tissue$CD160 <- ifelse(CD8T_Tissue$CD160>0,"CD160+","CD160-")
+CD8T_Colon <- subset(CD8T_Tissue, subset=Tissue2=="Colon")
+DEGs_Colon <- FindMarkers(CD8T_Colon,ident.1 = "CD160+",ident.2="CD160-",group.by = "CD160",logfc.threshold = 0.1)
+DEGs_Colon$genes <- rownames(DEGs_Colon)
+CD8T_Ileum <- subset(CD8T_Tissue, subset=Tissue2=="I")
+DEGs_Ileum <- FindMarkers(CD8T_Ileum,ident.1 = "CD160+",ident.2="CD160-",group.by = "CD160",logfc.threshold = 0.1)
+DEGs_Ileum$genes <- rownames(DEGs_Ileum)
+
+iOrd <- intersect(rownames(DEGs_Ileum),rownames(DEGs_Colon))# keep common DEGs
+df <- DEGs_Ileum[iOrd,c("avg_log2FC","p_val","p_val_adj")]
+colnames(df) <- paste0('I-',c('log2FC','p','FDR'))  
+df <- cbind(df,DEGs_Colon[iOrd,c("avg_log2FC","p_val","p_val_adj")])
+colnames(df)[4:6] <- paste0('C-',c('log2FC','p','FDR'))  
+df$gene <- rownames(df)
+
+df$label <- NA
+iOrd1 <- which(df$`I-log2FC`> 0.25 & df$`C-log2FC`>0.25) 
+iOrd2 <- which(df$`I-log2FC`< -0.25 & df$`C-log2FC` < -0.25)
+df$label[c(iOrd1,iOrd2)] <- rownames(df)[c(iOrd1,iOrd2)]
+
+#plot for immune genes:
+library(ggrepel)
+{
+  df$avgFC <- rowMeans(df[,c("I-log2FC","C-log2FC")])
+  df<-df[order(df$avgFC),]
+  colfunction <- colorRampPalette(c("#3288bd","#e0f3f8","#ffffbf","#fee090","#f46d43","#a50026"))
+  df$nodeCol <- colfunction(nrow(df))
+  df <- df[df$gene != "CD160",]# remove outliers
+  
+  p <- ggplot(data=df, aes(x = `I-log2FC`, y = `C-log2FC`,label=label)) +
+    geom_point(stroke = 0, alpha = 1,shape = 16,size=3,col = df$nodeCol) + 
+    theme_classic() +
+    geom_text_repel(colour="black") +
+    scale_color_gradient2(midpoint=0, low="#313695", mid="#f0f0f0",high="#a50026",space ="Lab") +
+    geom_hline(yintercept=0, linetype="dashed", color = "red")+
+    geom_vline(xintercept=0, linetype="dashed", color = "red")+
+    scale_y_continuous(breaks = seq(-6,8,by=0.5))+
+    scale_x_continuous(breaks = seq(-4,8,by=0.5))
 }
 
-for (i in unique(metaData_CA$Tissue2)) {
-  x <- metaData_CA[metaData_CA$Tissue2 == i,]
-  g.overlay <- ggplot(data = x,aes(x = UMAP_1, y = UMAP_2)) +
-    stat_density_2d(aes(fill = ..density..), geom = "raster",contour = F)+
-    geom_point(data = x[sample(seq_along(x[,1]),10000,replace = F),],
-               aes(x = UMAP_1, y = UMAP_2),color = 'white',size = .005)+
-    scale_fill_viridis(option="A")+theme_classic()
-  plot.path=paste0("./Analysis_afterN/Figures/All/umap by Density of ",i,"_CA.pdf")
-  ggsave(plot.path,width = 6,g.overlay)
+#----------------------------------------------------------------------------------------------------------
+#### Extended Data Fig. 3G ####
+#----------------------------------------------------------------------------------------------------------
+sel.genes <- c("CD8A",
+               "LEF1","TCF7","CCR7","SELL",#Naive
+               "ANXA1","IL7R","LMNA","LTB", #Tcm
+               "GZMK","GZMA","GZMB","PRF1","NKG7","GZMH", #Tem and CTL
+               "IFIT1","IFIT2","IFIT3",# IFI
+               "RORC","SLC4A10","TRAV1-2","CCR6",#MAIT
+               IEL.markers,
+               "TRDC","TRDV1","TYROBP"
+)
+CD8T_Tissue$CellType_n <- factor(CD8T_Tissue$CellType_n,levels=c(
+  'CD8_Naive','CD8_Mem','GZMK+ effector','CD8act_IFI','MAIT','Induced.IEL','Natural.IEL'))
+
+p1 <- DotPlot(CD8T_Tissue, features = sel.genes,assay = "RNA",scale = T,group.by = "CellType_n") +
+  scale_colour_gradientn(colors=rev(brewer.pal(9, "RdBu"))) + theme_bw() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_x_discrete(breaks=sel.genes,labels=sel.genes)+ ylab("Tissue")+ xlab("")
+#----------------------------------------------------------------------------------------------------------
+#### Extended Data Fig. 3H,3I ####
+#----------------------------------------------------------------------------------------------------------
+CD4T <- subset(object, subset=cellType_2=="CD4+ cells")
+CD4T <- scCluster(CD4T,nfeature=2500,min.d=0.1,res=1)
+CD4T <- RunUMAP(CD4T,reduction = "harmony",seed.use = 123,n.neighbors = 50,
+                dims=1:30,min.dist=0.6,spread=1)
+p1 <- DimPlot(CD4T, reduction = "umap",label =T,group.by = "CellType_n",
+              pt.size = 1,raster=T,shuffle=T,cols=T.colors)
+
+sel.genes <- c("LEF1","TCF7","CCR7","SELL",#Naive
+               "ANXA1","IL7R","LMNA","CD69","LTB", #Tcm
+               "GIMAP4","GZMK","GZMA","PRF1","NKG7","GZMH","GNLY", #Tem and CTL
+               "CXCL13","BCL6","CXCR5","IL21","TOX2","TOX","PDCD1",#Tfh
+               "FOXP3","IL2RA","CTLA4"#"Treg"
+)
+CD4T$CellType_n <- factor(CD4T$CellType_n,levels=c(
+  'CD4_Naive','CD4_Tcm','CD4_Tem','CD4_CTL','Tfh','Treg'))
+p2 <- DotPlot(CD4T, features = sel.genes,assay = "RNA",scale = T,group.by = "CellType_n") +
+  scale_colour_gradientn(colors=rev(brewer.pal(9, "RdBu"))) + theme_bw() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_x_discrete(breaks=sel.genes,labels=sel.genes)+ ylab("Tissue")+ xlab("")
+#----------------------------------------------------------------------------------------------------------
+#### Extended Data Fig. 3J,3K ####
+#----------------------------------------------------------------------------------------------------------
+CD8.Tcell <- subset(object,subset = CellType_n %in% 
+                      c('CD8_Mem','CD8_Naive','CD8act_IFI',
+                        'GZMK+ effector','Induced.IEL',
+                        'MAIT','Natural.IEL'))
+PLN <- subset(CD8.Tcell,subset=Tissue2 %in% c("PBMC","LN"))
+PLN <- scCluster(PLN,nfeature=2500,min.d=0.1,res=1.5)
+PLN <- RunHarmony(PLN, group.by.vars=c("orig.ident","Tissue2"),assay.use ="RNA")
+PLN <- FindNeighbors(PLN, dims=1:30,reduction = "harmony",k.param = 30)
+PLN <- FindClusters(PLN,resolution=1,random.seed=123,graph.name = 'RNA_snn')
+PLN <- RunUMAP(PLN,reduction = "harmony",seed.use = 123,dims=1:30,n.neighbors = 100,
+               umap.method='uwot',min.dist=0.2,spread=1)
+p1 <- DimPlot(PLN, reduction = "umap",label =T,group.by = "CellType_n",
+              pt.size = 1.3,raster=T,shuffle=T,cols=T.colors)
+
+sel.genes <- c("LEF1","TCF7","CCR7","SELL",#Naive
+               "KLF2","IL7R","LMNA","LTB", #Tcm
+               "GZMK","GZMA","GZMB","PRF1","NKG7","GNLY", #Tem and CTL
+               "LAG3","TOX","PDCD1","HAVCR2",#Exh
+               "RORC","SLC4A10","TRAV1-2","CEBPD","CCR6" #MAIT
+)
+PLN$CellType_n <- factor(PLN$CellType_n,levels=c(
+  'CD8_Naive','CD8_Mem','CD8_CTL','CD8_Exh','MAIT'))
+p2 <- DotPlot(PLN, features = sel.genes,assay = "RNA",scale = T,group.by = "CellType_n") +
+  scale_colour_gradientn(colors=rev(brewer.pal(9, "RdBu"))) + theme_bw() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_x_discrete(breaks=sel.genes,labels=sel.genes)+ ylab("Tissue")+ xlab("")
+#----------------------------------------------------------------------------------------------------------
+#### Extended Data Fig. 1H ####
+#----------------------------------------------------------------------------------------------------------
+library("scales")
+metaData <- object@meta.data[c(colnames(CD4T),colnames(PLN),colnames(CD8T_Tissue)),]
+metaData$Tissue <- paste0(metaData$Source,"_",metaData$Tissue2)
+x <- table(metaData$Tissue)/nrow(metaData)
+expected <- as.numeric(x);names(expected) <- names(x)
+expected <- expected[c('CA_Colon','CA_I','CA_LN','CA_PBMC','CA_T','Healthy_Colon','Healthy_I')]
+df <- NULL
+cellTypes <- unique(metaData$CellType_n)
+for (i in cellTypes) {
+  x <- metaData[metaData$CellType_n==i,]
+  temp <- c(CA_Colon=0,CA_I=0,CA_LN=0,CA_PBMC=0,CA_T=0,Healthy_Colon=0,Healthy_I=0)
+  temp[names(table(x$Tissue))] <- table(x$Tissue)
+  x <- temp/nrow(x)/expected
+  x <- data.frame(cellType=i,Tissue=names(x),Roe=as.numeric(x))
+  df <- rbind(df,x)
 }
+
+labs <- as.character(round(df$Roe,2))
+df2 <- df;df2$Roe[df2$Roe>=2.3]=2.3#change the max value to 2
+iOrd <- c('CD4_Naive','CD4_Tcm','CD4_Tem','CD4_CTL','Tfh','Treg',
+          'CD8_Naive','CD8_Mem','GZMK+ effector','CD8act_IFI','CD8_CTL','CD8_Exh',
+          'MAIT','Induced.IEL','Natural.IEL')
+iOrd2 <- c('CA_PBMC','CA_LN','CA_I','CA_Colon','CA_T','Healthy_I','Healthy_Colon')
+df2$cellType <- factor(df2$cellType,levels = iOrd)
+df2$Tissue <- factor(df2$Tissue,levels = iOrd2)
+p1 <- ggplot(data =  df2, aes(x = Tissue, y = cellType)) + 
+  geom_tile(aes(fill = Roe)) +
+  scale_fill_gradientn(colours=c("#4393c3","#92c5de","#f7f7f7","#f4a582","#d6604d","#b30000"),
+                       values=rescale(c(0,0.5,1,1.5,2,2.3)),
+                       guide="colorbar")
 #----------------------------------------------------------------------------------------------------------
-#### Fig.1D ####
+#### Extended Data Fig. 3I ####
 #----------------------------------------------------------------------------------------------------------
-detach("package:reshape2", unload=TRUE)
 detach("package:plyr", unload=TRUE)
-library(ggalluvial)
-load("color for CellType_12.rda")
-df <- object@meta.data
-df[,c("cellType_2")] <- factor(df[,c("cellType_2")])
-df <- df %>% group_by(Source,Tissue2,cellType_2,.drop = FALSE) %>% summarise(n=n()) %>%mutate(freq = n/sum(n))
-df$Tissue2 <- factor(df$Tissue2,levels=c("PBMC","LN","I","Colon","T"))
-df$cellType_2 <- factor(df$cellType_2,levels=c('B cells','Plasma','CD4+ cells','CD8+ cells',
-                                               'IEL','Other T','NK','MAST','Myeloid','pDC'))
-# iOrd <- df$cells[df$CellType_n %in% c("Induced.IEL","Natural.IEL") & df$cellType_2=="Other T"]
-# These 727 IEL-Ts are proliferating IEL-Ts, and all the proliferating cells are in "Other T" group.
-p1 <- ggplot(df,aes(x = Tissue2,y = freq,alluvium =cellType_2,fill=cellType_2,
-                    stratum = cellType_2)) +
-  geom_alluvium(curve_type="linear",alpha = 0.9,knot.pos = 0.01) +
-  geom_stratum(alpha = 1)+
-  scale_x_discrete() +
-  theme_classic()+
-  scale_fill_manual("legend", values = cellType_2.colors) +
-  facet_wrap(~Source) +
-  ggtitle("alluvial plot for cellType_2")
-#----------------------------------------------------------------------------------------------------------
-#### Fig.1E ####
-#----------------------------------------------------------------------------------------------------------
-df <- object@meta.data
 only_draw_pair_boxplot <- function(plot_df){
   p1 <- ggplot(data=plot_df, aes(x = Tissue2, y = value)) +
     geom_boxplot(alpha =0.7,size=1,outlier.shape = NA, mapping = aes(fill = Tissue2))+
@@ -116,116 +414,119 @@ only_draw_pair_boxplot <- function(plot_df){
     theme_classic()
   return(p1)
 }
-detach("package:plyr", unload=TRUE); detach("package:reshape2", unload=TRUE)
-df <- df %>% group_by(Source,Patient,Tissue2,cellType_1,.drop = FALSE) %>% summarise(n = n()) %>% mutate(freq = n/sum(n))
-df<-df[df$cellType_1=="Plasma",]
-df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
-df$value <- df$freq
-p1 <- only_draw_pair_boxplot(df)#fraction of Plasma cells
 
-df <- object@meta.data
-df$CD160 <- GetAssayData(object)["CD160",]
-df$CD160 <- ifelse(df$CD160>0,"CD160+","CD160-")
-df <- df %>% group_by(Source,Patient,Tissue2,CD160,.drop = FALSE) %>% summarise(n = n()) %>% mutate(freq = n/sum(n))
-df<-df[df$CD160=="CD160+",]
-df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
-df$value <- df$freq
-p1 <- only_draw_pair_boxplot(df)#fraction of CD160+ cells
+metaData_fil <- object@meta.data
+df <- metaData_fil[metaData_fil$cellType_2 == "CD4+ cells",]
+df <- df %>% group_by(Source,Patient,Tissue2,CellType_n,.drop = FALSE) %>% 
+  summarise(n = n()) %>% mutate(freq = n/sum(n))
 
-df <- object@meta.data
-df$NKG7 <- GetAssayData(object)["NKG7",]
-df$NKG7 <- ifelse(df$NKG7>0,"NKG7+","NKG7-")
-df <- df %>% group_by(Source,Patient,Tissue2,NKG7,.drop = FALSE) %>% summarise(n = n()) %>% mutate(freq = n/sum(n))
-df<-df[df$NKG7=="NKG7+",]
-df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
-df$value <- df$freq
-p1 <- only_draw_pair_boxplot(df)#fraction of NKG7+ cells
+df2<-df[df$CellType_n=="Treg",]
+df2$Tissue2 <-factor(df2$Tissue2, levels = names(Tissue.colors))
+df2$value <- df2$freq
+p1 <- only_draw_pair_boxplot(df2)
+
+df2<-df[df$CellType_n=="Tfh",]
+df2$Tissue2 <-factor(df2$Tissue2, levels = names(Tissue.colors))
+df2$value <- df2$freq
+p2 <- only_draw_pair_boxplot(df2)
 #----------------------------------------------------------------------------------------------------------
-#### Fig.1J ####
+#### Extended Data Fig. 3N,3O ####
 #----------------------------------------------------------------------------------------------------------
-library("factoextra");library(ggfortify);library(dendextend)
-load("./Seurat_objects_afterN/color for CellType_12.rda")
-# hierarchical clustering:
-for (i in c("T cells","Plasma","NK","Myeloid","B cells","MAST")) {
-  obj <- subset(object,subset=cellType_1==i)
-  iOrd <- table(obj$orig.ident)
-  iOrd <- names(iOrd)[iOrd>=50]
-  obj <- subset(obj,subset=orig.ident %in% iOrd)
-  obj <- FindVariableFeatures(obj,nfeatures = 2000)
-  expMat <- GetAssayData(obj,slot = "data")[VariableFeatures(obj),]
-  expMat <- groupMeans(expMat,groups=obj$orig.ident,sparse = T)
+#1. across cellTypes of CD8 T and CD4 T
+{
+  df <- object@meta.data[colnames(CD8T_Tissue),]
+  df <- cbind(df,scores[df$cells,-1])
+  df$CellType_n <- factor(df$CellType_n,levels=c(
+    'CD8_Naive','CD8_Mem','GZMK+ effector','CD8act_IFI','MAIT','Induced.IEL','Natural.IEL'))
+  p1 <- ggplot(df,aes(CellType_n, NeoTCR_CD8)) + 
+    geom_boxplot(aes(fill = CellType_n),outlier.shape = NA,alpha = 1)+
+    scale_fill_manual(values=all.cols)+
+    theme_classic()+ylab("Neoantigen reactivity (CD8+)")+
+    theme(legend.position="none",axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
   
-  dist_mat <- dist(t(expMat), method = 'euclidean')
-  hclust_avg <- hclust(dist_mat, method = 'ward.D')
-  plot(hclust_avg)
-  avg_dend_obj <- as.dendrogram(hclust_avg)
-  avg_col_dend <- color_branches(avg_dend_obj, k = 3)
-  plot.path=paste0("hcluster by ",i,".pdf")
-  pdf(plot.path,height = 4,width = 6)
-  plot(avg_col_dend)
-  dev.off()
+  df <- object@meta.data[colnames(CD4T),]
+  df <- cbind(df,scores[df$cells,-1])
+  df$CellType_n <- factor(df$CellType_n,levels=c(
+    'CD4_Naive','CD4_Tcm','CD4_Tem','CD4_CTL','Tfh','Treg'))
+  p2 <- ggplot(df,aes(CellType_n, NeoTCR_CD4)) + 
+    geom_boxplot(aes(fill = CellType_n),outlier.shape = NA,alpha = 1)+
+    scale_fill_manual(values=all.cols)+
+    theme_classic()+ylab("Neoantigen reactivity (CD4+)")+
+    theme(legend.position="none",axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 }
-#----------------------------------------------------------------------------------------------------------
-#### Fig.1K ####
-#----------------------------------------------------------------------------------------------------------
-load("scores.rda")
-df<- object@meta.data
-df <- cbind(df,scores[,-1])
-df<- df[df$cellType_1=="T cells",]
-df$Exh.score
-df$Tissue2 <- factor(df$Tissue2,levels=c("PBMC","LN","I","Colon","T"))
 
-# Exhaustion score
-ggplot(df,aes(Tissue2, Exh.score)) + 
-  geom_boxplot(aes(fill = Tissue2),outlier.shape = NA,alpha = 1)+
-  scale_fill_manual(values=Tissue.colors)+
-  theme_classic()
+#2. across Tissues for CD8 T and CD4 T
+{
+  df <- object@meta.data
+  df <- cbind(df,scores[df$cells,-1])
+  df <- df[df$CellType_n=="Treg",]
+  df$Tissue2 <- factor(df$Tissue2,levels = names(Tissue.colors))
+  p1 <- ggplot(df,aes(Tissue2, NeoTCR_CD4)) + 
+    geom_boxplot(aes(fill = Tissue2),outlier.shape = NA,alpha = 1)+
+    scale_fill_manual(values=Tissue.colors)+
+    theme_classic()+ylab("Neoantigen reactivity (CD4+)")+
+    theme(legend.position="none",axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+    facet_wrap(~Source)
+  
+  df <- object@meta.data
+  df <- cbind(df,scores[df$cells,-1])
+  df <- df[df$CellType_n=="Tfh",]
+  df$Tissue2 <- factor(df$Tissue2,levels = names(Tissue.colors))
+  p2 <- ggplot(df,aes(Tissue2, NeoTCR_CD4)) + 
+    geom_boxplot(aes(fill = Tissue2),outlier.shape = NA,alpha = 1)+
+    scale_fill_manual(values=Tissue.colors)+
+    theme_classic()+ylab("Neoantigen reactivity (CD4+)")+
+    theme(legend.position="none",axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+    facet_wrap(~Source)
+}
 
-# Exhaustion score
-ggplot(df,aes(Tissue2, IEL.score)) + 
-  geom_boxplot(aes(fill = Tissue2),outlier.shape = NA,alpha = 1)+
-  scale_fill_manual(values=Tissue.colors)+
-  theme_classic()
+#3. across Tissues for IEL-Ts
+{
+  df <- object@meta.data
+  df <- cbind(df,scores[df$cells,-1])
+  df <- df[df$CellType_n=="Induced.IEL",]
+  df$Tissue2 <- factor(df$Tissue2,levels = names(Tissue.colors))
+  p3 <- ggplot(df,aes(Tissue2, NeoTCR_CD8)) + 
+    geom_boxplot(aes(fill = Tissue2),outlier.shape = NA,alpha = 1)+
+    scale_fill_manual(values=Tissue.colors)+
+    theme_classic()+ylab("Neoantigen reactivity (CD8+)")+
+    theme(legend.position="none",axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+    facet_wrap(~Source)
+  
+  p4 <- ggplot(df,aes(Tissue2, Exh.score)) + 
+    geom_boxplot(aes(fill = Tissue2),outlier.shape = NA,alpha = 1)+
+    scale_fill_manual(values=Tissue.colors)+
+    theme_classic()+ylab("Exh.score")+
+    theme(legend.position="none",axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+    facet_wrap(~Source)
+  
+  p5 <- ggplot(df,aes(Tissue2, NeoTCR_CD8)) + 
+    geom_boxplot(aes(fill = Tissue2),outlier.shape = NA,alpha = 1)+
+    scale_fill_manual(values=Tissue.colors)+
+    theme_classic()+ylab("Neoantigen reactivity (CD8)")+
+    theme(legend.position="none",axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+    facet_wrap(~Source)
+  
+  p6 <- ggplot(df,aes(Tissue2, Virus_Specific)) + 
+    geom_boxplot(aes(fill = Tissue2),outlier.shape = NA,alpha = 1)+
+    scale_fill_manual(values=Tissue.colors)+
+    theme_classic()+ylab("Virus Specificity")+
+    theme(legend.position="none",axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+    facet_wrap(~Source)
+  
+  
+  df <- object@meta.data
+  df <- cbind(df,scores[df$cells,-1])
+  df <- df[df$CellType_n=="Natural.IEL",]
+  df$Tissue2 <- factor(df$Tissue2,levels = names(Tissue.colors))
+  p7 <- ggplot(df,aes(Tissue2, Cyt.score)) + 
+    geom_boxplot(aes(fill = Tissue2),outlier.shape = NA,alpha = 1)+
+    scale_fill_manual(values=Tissue.colors)+
+    theme_classic()+ylab("Cyt.score")+
+    theme(legend.position="none",axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+    facet_wrap(~Source)
+}
 
-# Cytolytic score of IELs
-df<- df[df$cellType_2=="IEL",]
-ggplot(df,aes(Tissue2, Cyt.score)) + 
-  geom_boxplot(aes(fill = Tissue2),outlier.shape = NA,alpha = 1)+
-  scale_fill_manual(values=Tissue.colors)+
-  theme_classic()
-#----------------------------------------------------------------------------------------------------------
-#### Fig.1M ####
-#----------------------------------------------------------------------------------------------------------
-# remove ribosomal genes, MT genes and BCR variable genes from analysis:
-ribosomals <- grep(pattern = "^RP[SL]", x = rownames(object), value = TRUE)
-TCR.genes <- grep("^TR[AB][VJ]",rownames(object),value = T)# keep GD TCR genes for GDT cells
-BCR.genes <- c(grep("^IG[KHL][VJC]",rownames(object),value = T))
-MT.genes <- grep(pattern = "^MT-", x = rownames(object), value = TRUE)
-
-obj <- subset(object,subset = Source == "Healthy" & cellType_2 == "IEL")
-Idents(obj) <- obj$Tissue2
-DEGs <- FindMarkers(obj,ident.1 = "I",ident.2 = "Colon",logfc.threshold=0.1)
-DEGs1 <- DEGs[rownames(DEGs) %ni% c(ribosomals,TCR.genes,MT.genes,BCR.genes),]
-
-obj <- subset(object,subset = Source == "CA" & cellType_2 == "IEL")
-Idents(obj) <- obj$Tissue2
-DEGs <- FindMarkers(obj,ident.1 = "I",ident.2 = "Colon",logfc.threshold=0.1)
-DEGs2 <- DEGs[rownames(DEGs) %ni% c(ribosomals,TCR.genes,MT.genes,BCR.genes),]
-
-colnames(DEGs1) <- paste0(colnames(DEGs1),"-","Healthy")
-colnames(DEGs2) <- paste0(colnames(DEGs2),"-","CA")
-iOrd <- intersect(rownames(DEGs1),rownames(DEGs2))
-df <- cbind(DEGs1[iOrd,],DEGs2[iOrd,]) # keep common DEGs
-df <- df[rownames(df) != "MT2A",]#remove outliers
-df$label[abs(df$`avg_log2FC-Healthy`)<0.5 | abs(df$`avg_log2FC-Healthy`)<0.5] <- NA
-
-library(ggrepel)
-ggplot(data=df, aes(x = `avg_log2FC-Healthy`, y = `avg_log2FC-CA`)) +
-  geom_point(stroke = 0, alpha = 0.8,shape = 16,size=3) + 
-  theme_classic() +
-  scale_color_gradient2(midpoint=0, low="#313695", mid="#f0f0f0",high="#a50026",space ="Lab") +
-  geom_hline(yintercept=0, linetype="dashed", color = "red")+
-  geom_vline(xintercept=0, linetype="dashed", color = "red")
 #----------------------------------------------------------------------------------------------------------
 #### End ####
 #----------------------------------------------------------------------------------------------------------

@@ -142,121 +142,6 @@ df<-df[df$NKG7=="NKG7+",]
 df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
 df$value <- df$freq
 p1 <- only_draw_pair_boxplot(df)#fraction of NKG7+ cells
-
-#----------------------------------------------------------------------------------------------------------
-#### Extended Data Fig. 1A,1B ####
-#----------------------------------------------------------------------------------------------------------
-Bcell <- subset(object,subset= cellType_1 %in% c("B cells","Plasma"))
-
-#1.clustering of B cells
-{
-  TCR.genes <- grep("^TR[AB][VJ]",rownames(Bcell),value = T)# keep GD TCR genes for GDT cells
-  BCR.genes <- c(grep("^IG[KHL][VJC]",rownames(Bcell),value = T),
-                 grep("^AC[0-9]",rownames(Bcell),value = T))# some RNA genes are also excluded.
-  Bcell@assays$RNA@scale.data <- matrix() # in order to subset memory efficiently
-  Bcell <- NormalizeData(Bcell)
-  Bcell <- FindVariableFeatures(Bcell,nfeatures = 2500)
-  var.genes <- VariableFeatures(Bcell)
-  var.genes <- setdiff(var.genes,c(TCR.genes,BCR.genes))
-  VariableFeatures(Bcell) <- var.genes
-  Bcell <- ScaleData(Bcell,features = var.genes)
-  Bcell <- RunPCA(Bcell, verbose = FALSE,features = VariableFeatures(Bcell),npcs=30)
-  Bcell <- RunHarmony(Bcell, group.by.vars=c("orig.ident","Tissue2"),assay.use ="RNA")
-  Bcell <- FindNeighbors(Bcell, dims=1:30,reduction = "harmony",k.param = 30)
-  Bcell <- FindClusters(Bcell,resolution=1,random.seed=123,graph.name = 'RNA_snn')
-  Bcell <- RunUMAP(Bcell,reduction = "harmony",seed.use = 123,dims=1:30,n.neighbors = 50,
-                   umap.method='uwot',min.dist=0.8,spread=1)
-}
-
-#2. generate Umap and dotplot:
-{
-  load("monocle3 of PCs.rda")
-  x <- df$cells[df$CellType_n=="Long-live"]
-  y <- df$cells[df$CellType_n=="Short-live"]
-  Bcell$cellType_2 <- paste0(Bcell$CellType_n)
-  Bcell@meta.data[x,"cellType_2"] <- "Long-live PC"
-  Bcell@meta.data[y,"cellType_2"] <- "Short-live PC"
-  
-  #1. UMAP
-  B.colors <- c(B_Naive="#E7F6D2",B_Mem="#3EB7CC",Bfoc_MKI67="#ffd94a",
-                Bfoc_NEIL1="#5F8E95",`Long-live PC`="#32A251",`Short-live PC`="#CE672E")
-  p1 <- DimPlot(Bcell, reduction = "umap",label =F,group.by = "cellType_2",
-                pt.size = 1,raster=T,shuffle=T,cols=B.colors)
-  
-  #Dotplot:
-  Markers <- c("CD79A","CD19",#common markers
-               "MS4A1","BANK1", "CCR7",#B_Mem
-               "FCER2","TCL1A","IL4R","BACH2","IGHD","SELL",#B_Naive
-               "NEIL1","RGS13","MEF2B","BCL6",'TUBA1B','MKI67','UBE2C','AURKB',#B_Foc
-               "MZB1", "CD27",'JCHAIN',"IGHA1","IGHA2","STAT3","IKZF3"
-  )
-  DotPlot(Bcell, features = Markers,assay = "RNA",scale = T,group.by = "cellType_2") +
-    scale_colour_gradientn(colors=rev(brewer.pal(9, "RdBu"))) + theme_bw() +
-    theme(axis.text.x = element_text(angle = 90)) +
-    scale_x_discrete(breaks=Markers,labels=Markers)+ ylab("cellType_2")+ xlab("")
-}
-#----------------------------------------------------------------------------------------------------------
-#### Extended Data Fig. 2A ####
-#----------------------------------------------------------------------------------------------------------
-DEGs <- FindMarkers(Bcell,ident.1 = "T",logfc.threshold=0.1,group.by = "Tissue2",min.pct = 0.3)
-DEGs <- DEGs[rownames(DEGs) %ni% c(ribosomals,TCR.genes,MT.genes,BCR.genes),]
-DEGs$gene <- rownames(DEGs)
-DEGs <- DEGs[order(DEGs$avg_log2FC),]
-write.table(DEGs,file = "DEGs of Tumor vs. other of B cells.txt",
-            quote = F,sep = "\t",row.names = F) # DEGs for enrichment analysis of functions.
-
-colour_bk <- c("#f0f0f0",colorRampPalette(c("#006837","#d9ef8b"))(5),
-               colorRampPalette(c("#d9ef8b","#fee08b"))(5),
-               colorRampPalette(c("#fee08b","#a50026"))(15))
-FeaturePlot(Bcell, "TGFB1",raster=T,order=F,pt.size = 2) & 
-  scale_colour_gradientn(colours = colour_bk)
-#----------------------------------------------------------------------------------------------------------
-#### Fig. 1F, Extended Data Fig. 2B,2C ####
-#----------------------------------------------------------------------------------------------------------
-metaData <- Bcell@meta.data
-df <- metaData %>% group_by(Tissue2,Source,cellType_2,.drop = FALSE) %>% summarise(n=n())
-df$cellType_2 <-factor(df$cellType_2, levels = names(B.colors))
-df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
-p <- ggplot(df, aes(x = Tissue2, y = n, fill = cellType_2)) + 
-  geom_bar(position = "fill",stat = "identity") + #position="stack" gives numbers
-  scale_fill_manual("legend", values = B.colors) +
-  theme_classic()+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
-  facet_grid(cols = vars(Source))#6*12
-
-only_draw_pair_boxplot <- function(plot_df){
-  p1 <- ggplot(data=plot_df, aes(x = Tissue2, y = value)) +
-    geom_boxplot(alpha =0.7,size=1,outlier.shape = NA, mapping = aes(fill = Tissue2))+
-    geom_jitter(size=3, shape=16,aes(group=Patient,col = Tissue2),
-                alpha = 0.9,position = position_dodge(0))+
-    scale_color_manual(values = Tissue.colors)+
-    scale_fill_manual(values = Tissue.colors)+
-    geom_line(aes(group = Patient), color = 'grey40', lwd = 0.3,position = position_dodge(0))+ #添加连线
-    facet_wrap(~Source,ncol = 2)+
-    theme_classic()
-  return(p1)
-}
-metaData <- Bcell@meta.data
-df <- metaData %>% group_by(Source,Patient,Tissue2,cellType_2,.drop = FALSE) %>% summarise(n = n()) %>% mutate(freq = n/sum(n))
-df<-df[df$cellType_2=="Long-live PC",]
-df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
-df$value <- df$freq
-p1 <- only_draw_pair_boxplot(df)
-
-load("clone_mutation.rda")
-df <- clone_mutation %>% group_by(Source,Tissue2,Patient,isotype,.drop = FALSE) %>% summarise(n=n()) %>% mutate(freq = n/sum(n))
-df<-df[df$isotype=="IgG",]
-df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
-df$value <- df$freq
-p2 <- only_draw_pair_boxplot(df)
-
-df <- clone_mutation %>% group_by(Tissue2,Source,c_call,.drop = FALSE) %>% summarise(n=n())
-df$c_call <-factor(df$c_call, levels = names(isotype.colors))
-df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
-p3 <- ggplot(df, aes(x = Tissue2, y = n, fill = c_call)) + 
-  geom_bar(position = "fill",stat = "identity") + #position="stack" gives numbers
-  scale_fill_manual("legend", values = isotype.colors) +
-  theme_classic()+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
-  facet_grid(cols = vars(Source))#6*12
 #----------------------------------------------------------------------------------------------------------
 #### Figure 1G ####
 #----------------------------------------------------------------------------------------------------------
@@ -406,6 +291,154 @@ ggplot(data=df, aes(x = `avg_log2FC-Healthy`, y = `avg_log2FC-CA`)) +
   scale_color_gradient2(midpoint=0, low="#313695", mid="#f0f0f0",high="#a50026",space ="Lab") +
   geom_hline(yintercept=0, linetype="dashed", color = "red")+
   geom_vline(xintercept=0, linetype="dashed", color = "red")
+
+#----------------------------------------------------------------------------------------------------------
+#### Extended Data Fig. 1A,1B ####
+#----------------------------------------------------------------------------------------------------------
+Bcell <- subset(object,subset= cellType_1 %in% c("B cells","Plasma"))
+
+#1.clustering of B cells
+{
+  TCR.genes <- grep("^TR[AB][VJ]",rownames(Bcell),value = T)# keep GD TCR genes for GDT cells
+  BCR.genes <- c(grep("^IG[KHL][VJC]",rownames(Bcell),value = T),
+                 grep("^AC[0-9]",rownames(Bcell),value = T))# some RNA genes are also excluded.
+  Bcell@assays$RNA@scale.data <- matrix() # in order to subset memory efficiently
+  Bcell <- NormalizeData(Bcell)
+  Bcell <- FindVariableFeatures(Bcell,nfeatures = 2500)
+  var.genes <- VariableFeatures(Bcell)
+  var.genes <- setdiff(var.genes,c(TCR.genes,BCR.genes))
+  VariableFeatures(Bcell) <- var.genes
+  Bcell <- ScaleData(Bcell,features = var.genes)
+  Bcell <- RunPCA(Bcell, verbose = FALSE,features = VariableFeatures(Bcell),npcs=30)
+  Bcell <- RunHarmony(Bcell, group.by.vars=c("orig.ident","Tissue2"),assay.use ="RNA")
+  Bcell <- FindNeighbors(Bcell, dims=1:30,reduction = "harmony",k.param = 30)
+  Bcell <- FindClusters(Bcell,resolution=1,random.seed=123,graph.name = 'RNA_snn')
+  Bcell <- RunUMAP(Bcell,reduction = "harmony",seed.use = 123,dims=1:30,n.neighbors = 50,
+                   umap.method='uwot',min.dist=0.8,spread=1)
+}
+
+#2. generate Umap and dotplot:
+{
+  load("monocle3 of PCs.rda")
+  x <- df$cells[df$CellType_n=="Long-live"]
+  y <- df$cells[df$CellType_n=="Short-live"]
+  Bcell$cellType_2 <- paste0(Bcell$CellType_n)
+  Bcell@meta.data[x,"cellType_2"] <- "Long-live PC"
+  Bcell@meta.data[y,"cellType_2"] <- "Short-live PC"
+  
+  #1. UMAP
+  B.colors <- c(B_Naive="#E7F6D2",B_Mem="#3EB7CC",Bfoc_MKI67="#ffd94a",
+                Bfoc_NEIL1="#5F8E95",`Long-live PC`="#32A251",`Short-live PC`="#CE672E")
+  p1 <- DimPlot(Bcell, reduction = "umap",label =F,group.by = "cellType_2",
+                pt.size = 1,raster=T,shuffle=T,cols=B.colors)
+  
+  #Dotplot:
+  Markers <- c("CD79A","CD19",#common markers
+               "MS4A1","BANK1", "CCR7",#B_Mem
+               "FCER2","TCL1A","IL4R","BACH2","IGHD","SELL",#B_Naive
+               "NEIL1","RGS13","MEF2B","BCL6",'TUBA1B','MKI67','UBE2C','AURKB',#B_Foc
+               "MZB1", "CD27",'JCHAIN',"IGHA1","IGHA2","STAT3","IKZF3"
+  )
+  DotPlot(Bcell, features = Markers,assay = "RNA",scale = T,group.by = "cellType_2") +
+    scale_colour_gradientn(colors=rev(brewer.pal(9, "RdBu"))) + theme_bw() +
+    theme(axis.text.x = element_text(angle = 90)) +
+    scale_x_discrete(breaks=Markers,labels=Markers)+ ylab("cellType_2")+ xlab("")
+}
+#----------------------------------------------------------------------------------------------------------
+#### Extended Data Fig. 1H ####
+#----------------------------------------------------------------------------------------------------------
+library("scales")
+metaData <- object@meta.data[c(colnames(CD4T),colnames(PLN),colnames(CD8T_Tissue)),]
+metaData$Tissue <- paste0(metaData$Source,"_",metaData$Tissue2)
+x <- table(metaData$Tissue)/nrow(metaData)
+expected <- as.numeric(x);names(expected) <- names(x)
+expected <- expected[c('CA_Colon','CA_I','CA_LN','CA_PBMC','CA_T','Healthy_Colon','Healthy_I')]
+df <- NULL
+cellTypes <- unique(metaData$CellType_n)
+for (i in cellTypes) {
+  x <- metaData[metaData$CellType_n==i,]
+  temp <- c(CA_Colon=0,CA_I=0,CA_LN=0,CA_PBMC=0,CA_T=0,Healthy_Colon=0,Healthy_I=0)
+  temp[names(table(x$Tissue))] <- table(x$Tissue)
+  x <- temp/nrow(x)/expected
+  x <- data.frame(cellType=i,Tissue=names(x),Roe=as.numeric(x))
+  df <- rbind(df,x)
+}
+
+labs <- as.character(round(df$Roe,2))
+df2 <- df;df2$Roe[df2$Roe>=2.3]=2.3#change the max value to 2
+iOrd <- c('CD4_Naive','CD4_Tcm','CD4_Tem','CD4_CTL','Tfh','Treg',
+          'CD8_Naive','CD8_Mem','GZMK+ effector','CD8act_IFI','CD8_CTL','CD8_Exh',
+          'MAIT','Induced.IEL','Natural.IEL')
+iOrd2 <- c('CA_PBMC','CA_LN','CA_I','CA_Colon','CA_T','Healthy_I','Healthy_Colon')
+df2$cellType <- factor(df2$cellType,levels = iOrd)
+df2$Tissue <- factor(df2$Tissue,levels = iOrd2)
+p1 <- ggplot(data =  df2, aes(x = Tissue, y = cellType)) + 
+  geom_tile(aes(fill = Roe)) +
+  scale_fill_gradientn(colours=c("#4393c3","#92c5de","#f7f7f7","#f4a582","#d6604d","#b30000"),
+                       values=rescale(c(0,0.5,1,1.5,2,2.3)),
+                       guide="colorbar")
+#----------------------------------------------------------------------------------------------------------
+#### Extended Data Fig. 2A ####
+#----------------------------------------------------------------------------------------------------------
+DEGs <- FindMarkers(Bcell,ident.1 = "T",logfc.threshold=0.1,group.by = "Tissue2",min.pct = 0.3)
+DEGs <- DEGs[rownames(DEGs) %ni% c(ribosomals,TCR.genes,MT.genes,BCR.genes),]
+DEGs$gene <- rownames(DEGs)
+DEGs <- DEGs[order(DEGs$avg_log2FC),]
+write.table(DEGs,file = "DEGs of Tumor vs. other of B cells.txt",
+            quote = F,sep = "\t",row.names = F) # DEGs for enrichment analysis of functions.
+
+colour_bk <- c("#f0f0f0",colorRampPalette(c("#006837","#d9ef8b"))(5),
+               colorRampPalette(c("#d9ef8b","#fee08b"))(5),
+               colorRampPalette(c("#fee08b","#a50026"))(15))
+FeaturePlot(Bcell, "TGFB1",raster=T,order=F,pt.size = 2) & 
+  scale_colour_gradientn(colours = colour_bk)
+#----------------------------------------------------------------------------------------------------------
+#### Fig. 1F, Extended Data Fig. 2B,2C ####
+#----------------------------------------------------------------------------------------------------------
+metaData <- Bcell@meta.data
+df <- metaData %>% group_by(Tissue2,Source,cellType_2,.drop = FALSE) %>% summarise(n=n())
+df$cellType_2 <-factor(df$cellType_2, levels = names(B.colors))
+df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
+p <- ggplot(df, aes(x = Tissue2, y = n, fill = cellType_2)) + 
+  geom_bar(position = "fill",stat = "identity") + #position="stack" gives numbers
+  scale_fill_manual("legend", values = B.colors) +
+  theme_classic()+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  facet_grid(cols = vars(Source))#6*12
+
+only_draw_pair_boxplot <- function(plot_df){
+  p1 <- ggplot(data=plot_df, aes(x = Tissue2, y = value)) +
+    geom_boxplot(alpha =0.7,size=1,outlier.shape = NA, mapping = aes(fill = Tissue2))+
+    geom_jitter(size=3, shape=16,aes(group=Patient,col = Tissue2),
+                alpha = 0.9,position = position_dodge(0))+
+    scale_color_manual(values = Tissue.colors)+
+    scale_fill_manual(values = Tissue.colors)+
+    geom_line(aes(group = Patient), color = 'grey40', lwd = 0.3,position = position_dodge(0))+ #添加连线
+    facet_wrap(~Source,ncol = 2)+
+    theme_classic()
+  return(p1)
+}
+metaData <- Bcell@meta.data
+df <- metaData %>% group_by(Source,Patient,Tissue2,cellType_2,.drop = FALSE) %>% summarise(n = n()) %>% mutate(freq = n/sum(n))
+df<-df[df$cellType_2=="Long-live PC",]
+df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
+df$value <- df$freq
+p1 <- only_draw_pair_boxplot(df)
+
+load("clone_mutation.rda")
+df <- clone_mutation %>% group_by(Source,Tissue2,Patient,isotype,.drop = FALSE) %>% summarise(n=n()) %>% mutate(freq = n/sum(n))
+df<-df[df$isotype=="IgG",]
+df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
+df$value <- df$freq
+p2 <- only_draw_pair_boxplot(df)
+
+df <- clone_mutation %>% group_by(Tissue2,Source,c_call,.drop = FALSE) %>% summarise(n=n())
+df$c_call <-factor(df$c_call, levels = names(isotype.colors))
+df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
+p3 <- ggplot(df, aes(x = Tissue2, y = n, fill = c_call)) + 
+  geom_bar(position = "fill",stat = "identity") + #position="stack" gives numbers
+  scale_fill_manual("legend", values = isotype.colors) +
+  theme_classic()+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  facet_grid(cols = vars(Source))#6*12
 #----------------------------------------------------------------------------------------------------------
 #### End ####
 #----------------------------------------------------------------------------------------------------------

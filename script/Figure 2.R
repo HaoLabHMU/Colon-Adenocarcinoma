@@ -365,41 +365,9 @@ p2 <- DotPlot(PLN, features = sel.genes,assay = "RNA",scale = T,group.by = "Cell
   scale_colour_gradientn(colors=rev(brewer.pal(9, "RdBu"))) + theme_bw() +
   theme(axis.text.x = element_text(angle = 90)) +
   scale_x_discrete(breaks=sel.genes,labels=sel.genes)+ ylab("Tissue")+ xlab("")
-#----------------------------------------------------------------------------------------------------------
-#### Extended Data Fig. 1H ####
-#----------------------------------------------------------------------------------------------------------
-library("scales")
-metaData <- object@meta.data[c(colnames(CD4T),colnames(PLN),colnames(CD8T_Tissue)),]
-metaData$Tissue <- paste0(metaData$Source,"_",metaData$Tissue2)
-x <- table(metaData$Tissue)/nrow(metaData)
-expected <- as.numeric(x);names(expected) <- names(x)
-expected <- expected[c('CA_Colon','CA_I','CA_LN','CA_PBMC','CA_T','Healthy_Colon','Healthy_I')]
-df <- NULL
-cellTypes <- unique(metaData$CellType_n)
-for (i in cellTypes) {
-  x <- metaData[metaData$CellType_n==i,]
-  temp <- c(CA_Colon=0,CA_I=0,CA_LN=0,CA_PBMC=0,CA_T=0,Healthy_Colon=0,Healthy_I=0)
-  temp[names(table(x$Tissue))] <- table(x$Tissue)
-  x <- temp/nrow(x)/expected
-  x <- data.frame(cellType=i,Tissue=names(x),Roe=as.numeric(x))
-  df <- rbind(df,x)
-}
 
-labs <- as.character(round(df$Roe,2))
-df2 <- df;df2$Roe[df2$Roe>=2.3]=2.3#change the max value to 2
-iOrd <- c('CD4_Naive','CD4_Tcm','CD4_Tem','CD4_CTL','Tfh','Treg',
-          'CD8_Naive','CD8_Mem','GZMK+ effector','CD8act_IFI','CD8_CTL','CD8_Exh',
-          'MAIT','Induced.IEL','Natural.IEL')
-iOrd2 <- c('CA_PBMC','CA_LN','CA_I','CA_Colon','CA_T','Healthy_I','Healthy_Colon')
-df2$cellType <- factor(df2$cellType,levels = iOrd)
-df2$Tissue <- factor(df2$Tissue,levels = iOrd2)
-p1 <- ggplot(data =  df2, aes(x = Tissue, y = cellType)) + 
-  geom_tile(aes(fill = Roe)) +
-  scale_fill_gradientn(colours=c("#4393c3","#92c5de","#f7f7f7","#f4a582","#d6604d","#b30000"),
-                       values=rescale(c(0,0.5,1,1.5,2,2.3)),
-                       guide="colorbar")
 #----------------------------------------------------------------------------------------------------------
-#### Extended Data Fig. 3I ####
+#### Extended Data Fig. 3L ####
 #----------------------------------------------------------------------------------------------------------
 detach("package:plyr", unload=TRUE)
 only_draw_pair_boxplot <- function(plot_df){

@@ -143,6 +143,53 @@ df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
 df$value <- df$freq
 p1 <- only_draw_pair_boxplot(df)#fraction of NKG7+ cells
 #----------------------------------------------------------------------------------------------------------
+#### Fig. 1F, Extended Data Fig. 2B,2C ####
+#----------------------------------------------------------------------------------------------------------
+metaData <- Bcell@meta.data
+df <- metaData %>% group_by(Tissue2,Source,cellType_2,.drop = FALSE) %>% summarise(n=n())
+df$cellType_2 <-factor(df$cellType_2, levels = names(B.colors))
+df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
+p <- ggplot(df, aes(x = Tissue2, y = n, fill = cellType_2)) + 
+  geom_bar(position = "fill",stat = "identity") + #position="stack" gives numbers
+  scale_fill_manual("legend", values = B.colors) +
+  theme_classic()+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  facet_grid(cols = vars(Source))#6*12
+
+only_draw_pair_boxplot <- function(plot_df){
+  p1 <- ggplot(data=plot_df, aes(x = Tissue2, y = value)) +
+    geom_boxplot(alpha =0.7,size=1,outlier.shape = NA, mapping = aes(fill = Tissue2))+
+    geom_jitter(size=3, shape=16,aes(group=Patient,col = Tissue2),
+                alpha = 0.9,position = position_dodge(0))+
+    scale_color_manual(values = Tissue.colors)+
+    scale_fill_manual(values = Tissue.colors)+
+    geom_line(aes(group = Patient), color = 'grey40', lwd = 0.3,position = position_dodge(0))+ #添加连线
+    facet_wrap(~Source,ncol = 2)+
+    theme_classic()
+  return(p1)
+}
+metaData <- Bcell@meta.data
+df <- metaData %>% group_by(Source,Patient,Tissue2,cellType_2,.drop = FALSE) %>% summarise(n = n()) %>% mutate(freq = n/sum(n))
+df<-df[df$cellType_2=="Long-live PC",]
+df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
+df$value <- df$freq
+p1 <- only_draw_pair_boxplot(df)
+
+load("clone_mutation.rda")
+df <- clone_mutation %>% group_by(Source,Tissue2,Patient,isotype,.drop = FALSE) %>% summarise(n=n()) %>% mutate(freq = n/sum(n))
+df<-df[df$isotype=="IgG",]
+df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
+df$value <- df$freq
+p2 <- only_draw_pair_boxplot(df)
+
+df <- clone_mutation %>% group_by(Tissue2,Source,c_call,.drop = FALSE) %>% summarise(n=n())
+df$c_call <-factor(df$c_call, levels = names(isotype.colors))
+df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
+p3 <- ggplot(df, aes(x = Tissue2, y = n, fill = c_call)) + 
+  geom_bar(position = "fill",stat = "identity") + #position="stack" gives numbers
+  scale_fill_manual("legend", values = isotype.colors) +
+  theme_classic()+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+  facet_grid(cols = vars(Source))#6*12
+#----------------------------------------------------------------------------------------------------------
 #### Figure 1G ####
 #----------------------------------------------------------------------------------------------------------
 #1. get clones from tumor B cells
@@ -392,53 +439,7 @@ colour_bk <- c("#f0f0f0",colorRampPalette(c("#006837","#d9ef8b"))(5),
                colorRampPalette(c("#fee08b","#a50026"))(15))
 FeaturePlot(Bcell, "TGFB1",raster=T,order=F,pt.size = 2) & 
   scale_colour_gradientn(colours = colour_bk)
-#----------------------------------------------------------------------------------------------------------
-#### Fig. 1F, Extended Data Fig. 2B,2C ####
-#----------------------------------------------------------------------------------------------------------
-metaData <- Bcell@meta.data
-df <- metaData %>% group_by(Tissue2,Source,cellType_2,.drop = FALSE) %>% summarise(n=n())
-df$cellType_2 <-factor(df$cellType_2, levels = names(B.colors))
-df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
-p <- ggplot(df, aes(x = Tissue2, y = n, fill = cellType_2)) + 
-  geom_bar(position = "fill",stat = "identity") + #position="stack" gives numbers
-  scale_fill_manual("legend", values = B.colors) +
-  theme_classic()+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
-  facet_grid(cols = vars(Source))#6*12
 
-only_draw_pair_boxplot <- function(plot_df){
-  p1 <- ggplot(data=plot_df, aes(x = Tissue2, y = value)) +
-    geom_boxplot(alpha =0.7,size=1,outlier.shape = NA, mapping = aes(fill = Tissue2))+
-    geom_jitter(size=3, shape=16,aes(group=Patient,col = Tissue2),
-                alpha = 0.9,position = position_dodge(0))+
-    scale_color_manual(values = Tissue.colors)+
-    scale_fill_manual(values = Tissue.colors)+
-    geom_line(aes(group = Patient), color = 'grey40', lwd = 0.3,position = position_dodge(0))+ #添加连线
-    facet_wrap(~Source,ncol = 2)+
-    theme_classic()
-  return(p1)
-}
-metaData <- Bcell@meta.data
-df <- metaData %>% group_by(Source,Patient,Tissue2,cellType_2,.drop = FALSE) %>% summarise(n = n()) %>% mutate(freq = n/sum(n))
-df<-df[df$cellType_2=="Long-live PC",]
-df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
-df$value <- df$freq
-p1 <- only_draw_pair_boxplot(df)
-
-load("clone_mutation.rda")
-df <- clone_mutation %>% group_by(Source,Tissue2,Patient,isotype,.drop = FALSE) %>% summarise(n=n()) %>% mutate(freq = n/sum(n))
-df<-df[df$isotype=="IgG",]
-df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
-df$value <- df$freq
-p2 <- only_draw_pair_boxplot(df)
-
-df <- clone_mutation %>% group_by(Tissue2,Source,c_call,.drop = FALSE) %>% summarise(n=n())
-df$c_call <-factor(df$c_call, levels = names(isotype.colors))
-df$Tissue2 <-factor(df$Tissue2, levels = names(Tissue.colors))
-p3 <- ggplot(df, aes(x = Tissue2, y = n, fill = c_call)) + 
-  geom_bar(position = "fill",stat = "identity") + #position="stack" gives numbers
-  scale_fill_manual("legend", values = isotype.colors) +
-  theme_classic()+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
-  facet_grid(cols = vars(Source))#6*12
 #----------------------------------------------------------------------------------------------------------
 #### End ####
 #----------------------------------------------------------------------------------------------------------

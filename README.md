@@ -12,7 +12,7 @@ To prepare data for downstream analysis, FastQC (v0.12.1) was used to assess the
 Specific input data for each figure is also inclued in /input_data.
 
 The raw data are uploaded to GSA: scRNASeq: HRA006401, bulk RNASeq: HRA006350  
-The processed data are uploaded to mendeley: scRNASeq: 10.17632/6czch25jyb.1, bulk RNASeq: 10.17632/hb9jjk2gbz.1.
+The processed data are uploaded to Mendeley Data: scRNASeq: 10.17632/6czch25jyb.1, bulk RNASeq: 10.17632/hb9jjk2gbz.1.
 
 ## Data visualization
 ### Requirements
